@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>积分可视化 · 多重积分交互图集</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&family=Zhi+Mang+Xing&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1a1209;
+      --paper: #f5f0e8;
+      --aged: #e8dfc8;
+      --vermilion: #c0392b;
+      --gold: #b8860b;
+      --jade: #2e6b5a;
+      --deep: #1e3a5f;
+      --mist: #8b9aaa;
+      --seal: #8b1a1a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Noto Serif SC', serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Paper texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Decorative vertical rule */
+    .v-rule {
+      position: fixed;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, var(--gold) 20%, var(--gold) 80%, transparent);
+      opacity: 0.4;
+      z-index: 1;
+    }
+    .v-rule-left { left: 60px; }
+    .v-rule-right { right: 60px; }
+
+    header {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      padding: 60px 80px 40px;
+      border-bottom: 1px solid rgba(184,134,11,0.3);
+    }
+
+    .header-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      color: var(--mist);
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 900;
+      line-height: 1.1;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+
+    h1 .highlight {
+      color: var(--vermilion);
+      position: relative;
+    }
+
+    h1 .highlight::after {
+      content: '';
+      position: absolute;
+      bottom: 2px; left: 0; right: 0;
+      height: 3px;
+      background: var(--vermilion);
+      opacity: 0.3;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: var(--mist);
+      letter-spacing: 0.1em;
+    }
+
+    /* Seal stamp decoration */
+    .seal {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px; height: 56px;
+      border: 2px solid var(--seal);
+      border-radius: 4px;
+      color: var(--seal);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      writing-mode: vertical-rl;
+      font-weight: 600;
+      position: absolute;
+      right: 80px;
+      top: 50%;
+      transform: translateY(-50%) rotate(5deg);
+      opacity: 0.7;
+    }
+
+    main {
+      position: relative;
+      z-index: 2;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 60px 80px;
+    }
+
+    /* Section headers styled like chapter markers */
+    .chapter {
+      margin-bottom: 50px;
+    }
+
+    .chapter-header {
+      display: flex;
+      align-items: baseline;
+      gap: 20px;
+      margin-bottom: 32px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--ink);
+      position: relative;
+    }
+
+    .chapter-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--vermilion);
+      letter-spacing: 0.2em;
+      font-weight: 500;
+      padding: 3px 8px;
+      border: 1px solid var(--vermilion);
+    }
+
+    .chapter-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .chapter-header::after {
+      content: '';
+      position: absolute;
+      right: 0; bottom: -2px;
+      width: 40px; height: 2px;
+      background: var(--vermilion);
+    }
+
+    /* Sub-section */
+    .subsection {
+      margin-bottom: 36px;
+    }
+
+    .subsection-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--deep);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .subsection-title::before {
+      content: '';
+      width: 20px; height: 1px;
+      background: var(--deep);
+      display: inline-block;
+    }
+
+    /* Card grid */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .card-grid.two-col {
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    }
+
+    /* Link cards */
+    .link-card {
+      position: relative;
+      background: rgba(255,255,255,0.6);
+      border: 1px solid rgba(184,134,11,0.25);
+      padding: 20px 24px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .link-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(184,134,11,0.05), transparent);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .link-card:hover {
+      border-color: var(--gold);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(26,18,9,0.08), 4px 0 0 var(--jade) inset;
+    }
+
+    .link-card:hover::before { opacity: 1; }
+
+    .card-icon {
+      width: 40px; height: 40px;
+      min-width: 40px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .icon-2d {
+      background: rgba(46,107,90,0.1);
+      color: var(--jade);
+      border: 1px solid rgba(46,107,90,0.3);
+    }
+
+    .icon-3d {
+      background: rgba(30,58,95,0.1);
+      color: var(--deep);
+      border: 1px solid rgba(30,58,95,0.3);
+    }
+
+    .icon-polar {
+      background: rgba(192,57,43,0.08);
+      color: var(--vermilion);
+      border: 1px solid rgba(192,57,43,0.25);
+    }
+
+    .card-content { flex: 1; }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+
+    .card-desc {
+      font-size: 0.8rem;
+      color: var(--mist);
+      line-height: 1.5;
+    }
+
+    .card-arrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      color: var(--gold);
+      transition: transform 0.2s;
+      margin-top: 2px;
+    }
+
+    .link-card:hover .card-arrow { transform: translateX(4px); }
+
+    /* Note badge */
+    .note-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--mist);
+      padding: 3px 8px;
+      border: 1px dashed rgba(139,154,170,0.5);
+      border-radius: 2px;
+      margin-top: 8px;
+    }
+
+    .note-badge::before {
+      content: '※';
+      color: var(--gold);
+    }
+
+    /* Divider */
+    .ornament-divider {
+      text-align: center;
+      margin: 48px 0;
+      color: var(--gold);
+      font-size: 18px;
+      letter-spacing: 12px;
+      opacity: 0.6;
+    }
+
+    footer {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      padding: 32px 80px;
+      border-top: 1px solid rgba(184,134,11,0.2);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--mist);
+      letter-spacing: 0.15em;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .chapter { animation: fadeUp 0.5s ease both; }
+    .chapter:nth-child(1) { animation-delay: 0.1s; }
+    .chapter:nth-child(2) { animation-delay: 0.25s; }
+
+    .link-card { animation: fadeUp 0.4s ease both; }
+
+    @media (max-width: 700px) {
+      header, main, footer { padding-left: 24px; padding-right: 24px; }
+      .v-rule { display: none; }
+      .seal { display: none; }
+      .card-grid, .card-grid.two-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="v-rule v-rule-left"></div>
+<div class="v-rule v-rule-right"></div>
+
+<header>
+  <div class="header-label">Interactive · GeoGebra · Visualization</div>
+  <h1>多重积分<span class="highlight">可视化</span>图集</h1>
+  <p class="subtitle">二重积分 · 三重积分 · 交互式动态演示</p>
+  <div class="seal">积分<br>图集</div>
+</header>
+
+<main>
+
+  <!-- 二重积分 -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">CHAPTER I</span>
+      <span class="chapter-title">二重积分</span>
+    </div>
+
+    <!-- X型 Y型 -->
+    <div class="subsection">
+      <div class="subsection-title">基本类型</div>
+      <div class="card-grid">
+        <a class="link-card" href="https://www.geogebra.org/graphing/vqdjftvm" target="_blank" rel="noopener"
+           style="animation-delay:0.15s">
+          <div class="card-icon icon-2d">X型</div>
+          <div class="card-content">
+            <div class="card-title">X 型区域</div>
+            <div class="card-desc">先对 y 积分，积分限为 x 的函数</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/graphing/pxqawx5t" target="_blank" rel="noopener"
+           style="animation-delay:0.2s">
+          <div class="card-icon icon-2d">Y型</div>
+          <div class="card-content">
+            <div class="card-title">Y 型区域</div>
+            <div class="card-desc">先对 x 积分，积分限为 y 的函数</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- 混合型 -->
+    <div class="subsection">
+      <div class="subsection-title">混合型（拆分）</div>
+      <div class="card-grid">
+        <a class="link-card" href="https://www.geogebra.org/graphing/atpx8t4d" target="_blank" rel="noopener"
+           style="animation-delay:0.25s">
+          <div class="card-icon icon-2d">① X</div>
+          <div class="card-content">
+            <div class="card-title">混合型 — X 型拆分</div>
+            <div class="card-desc">区域拆分后按 X 型计算</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/graphing/bxyxxszj" target="_blank" rel="noopener"
+           style="animation-delay:0.3s">
+          <div class="card-icon icon-2d">② Y</div>
+          <div class="card-content">
+            <div class="card-title">混合型 — Y 型拆分</div>
+            <div class="card-desc">区域拆分后按 Y 型计算</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- 极坐标 -->
+    <div class="subsection">
+      <div class="subsection-title">极坐标</div>
+      <div class="card-grid">
+        <a class="link-card" href="https://www.geogebra.org/calculator/avcrqyeb" target="_blank" rel="noopener"
+           style="animation-delay:0.35s">
+          <div class="card-icon icon-polar">极①</div>
+          <div class="card-content">
+            <div class="card-title">极坐标积分（一）</div>
+            <div class="card-desc">极坐标下的二重积分区域与计算</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/calculator/urdkuuad" target="_blank" rel="noopener"
+           style="animation-delay:0.4s">
+          <div class="card-icon icon-polar">极②</div>
+          <div class="card-content">
+            <div class="card-title">极坐标积分（二）</div>
+            <div class="card-desc">极坐标变换的交互演示</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="ornament-divider">· · ◆ · ·</div>
+
+  <!-- 三重积分 -->
+  <div class="chapter">
+    <div class="chapter-header">
+      <span class="chapter-num">CHAPTER II</span>
+      <span class="chapter-title">三重积分</span>
+    </div>
+
+    <!-- 直角坐标 -->
+    <div class="subsection">
+      <div class="subsection-title">直角坐标系</div>
+      <div class="card-grid two-col">
+        <a class="link-card" href="https://www.geogebra.org/classic/tjwevx3t" target="_blank" rel="noopener"
+           style="animation-delay:0.1s">
+          <div class="card-icon icon-3d">投影</div>
+          <div class="card-content">
+            <div class="card-title">投影法（先一后二）</div>
+            <div class="card-desc">先对 z 积分，再对 xOy 平面上的投影区域作二重积分</div>
+            <span class="note-badge">N 点可在 xOy 平面内移动</span>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/classic/hzzfggft" target="_blank" rel="noopener"
+           style="animation-delay:0.15s">
+          <div class="card-icon icon-3d">截面</div>
+          <div class="card-content">
+            <div class="card-title">截面法（先二后一）</div>
+            <div class="card-desc">先对截面区域作二重积分，再沿轴方向做定积分</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- 球坐标 -->
+    <div class="subsection">
+      <div class="subsection-title">球坐标系</div>
+      <div class="card-grid two-col">
+        <a class="link-card" href="https://www.geogebra.org/classic/kpyguvxt" target="_blank" rel="noopener"
+           style="animation-delay:0.2s">
+          <div class="card-icon icon-polar">球坐</div>
+          <div class="card-content">
+            <div class="card-title">球坐标积分</div>
+            <div class="card-desc">三重积分的球坐标变换与空间区域可视化</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- 综合 3D -->
+    <div class="subsection">
+      <div class="subsection-title">综合 3D 演示</div>
+      <div class="card-grid">
+        <a class="link-card" href="https://www.geogebra.org/3d/ktcupaa7" target="_blank" rel="noopener"
+           style="animation-delay:0.25s">
+          <div class="card-icon icon-3d">3D①</div>
+          <div class="card-content">
+            <div class="card-title">先一后二</div>
+            <div class="card-desc">三维空间中的投影法综合演示</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/3d/hqurqwqq" target="_blank" rel="noopener"
+           style="animation-delay:0.3s">
+          <div class="card-icon icon-3d">3D②</div>
+          <div class="card-content">
+            <div class="card-title">先二后一</div>
+            <div class="card-desc">三维空间中的截面法综合演示</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+        <a class="link-card" href="https://www.geogebra.org/3d/gar248k2" target="_blank" rel="noopener"
+           style="animation-delay:0.35s">
+          <div class="card-icon icon-polar">3D③</div>
+          <div class="card-content">
+            <div class="card-title">球坐标</div>
+            <div class="card-desc">三维空间中球坐标变换的综合演示</div>
+          </div>
+          <div class="card-arrow">→</div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  所有图示均通过 GeoGebra 交互平台呈现 · 点击卡片在新标签页中打开
+</footer>
+
+</body>
+</html>
